@@ -12,6 +12,7 @@ from components.hvac_system import HVAC
 from components.electric_water_heating import EWH
 
 from components.non_controllable_load import NCLoad
+from components.controllable_load import CALoad
 
 class HomeEnergyManagementSystem:
     def __init__(self):
@@ -43,25 +44,13 @@ class HomeEnergyManagementSystem:
         self.grid = Grid(cfg.T_NUM, cfg.T_SET, cfg.DELTA_T, cfg.P_GRID_PUR_MAX, cfg.P_GRID_EXP_MAX, cfg.PHI_RTP)
 
         # PV system parameters
-        self.p_pv_rate = cfg.P_PV_RATE
-        self.n_pv = cfg.N_PV
-        self.phi_pv = cfg.PHI_PV
-
-        self.p_pv = get_pv_output(self.ghi, self.p_pv_rate, self.n_pv, self.theta_air_out)
+        self.pv = PV(cfg.T_NUM, cfg.T_SET, cfg.DELTA_T, cfg.P_PV_RATE, cfg.N_PV)
 
         # Non-controllable appliances
         self.ncload = NCLoad(cfg.T_NUM, cfg.T_SET, cfg.DELTA_T, cfg.NUM_NC, cfg.P_NC_RATE, cfg.NUM_NC_OPERATION, cfg.T_NC_START)
-        self.p_nc = self.ncload.get_power_consumption()
 
         # Controllable appliances
-        self.num_ca = cfg.NUM_CA
-        self.p_ca_rate = np.array(cfg.P_CA_RATE)
-        self.num_ca_operation = np.array(cfg.NUM_CA_OPERATION)
-        self.t_ca_start_max = np.array(cfg.T_CA_START_MAX)
-        self.t_ca_end_max = np.array(cfg.T_CA_END_MAX)
-        self.t_ca_start_prefer = np.array(cfg.T_CA_START_PREFER)
-        self.t_ca_end_prefer = np.array(cfg.T_CA_END_PREFER)
-        self.t_ca_range = get_ca_availability(self.T_num, self.num_ca, self.t_ca_start_max, self.t_ca_end_max)
+        self.caload = CALoad(cfg.T_NUM, cfg.T_SET, cfg.DELTA_T, cfg.NUM_CA, cfg.P_CA_RATE, cfg.NUM_CA_OPERATION, cfg.T_CA_START_MAX, cfg.T_CA_END_MAX, cfg.T_CA_START_PREFER, cfg.T_CA_END_PREFER)
 
         # Battery Energy Storage System (ess)
         self.ess = ESS(cfg.T_NUM, cfg.T_SET, cfg.DELTA_T, cfg.P_ESS_CH_MAX, cfg.P_ESS_DCH_MAX, cfg.N_ESS_CH, cfg.N_ESS_DCH, cfg.SOC_ESS_MAX, cfg.SOC_ESS_MIN, cfg.SOC_ESS_SETPOINT)
@@ -102,39 +91,17 @@ class HomeEnergyManagementSystem:
         p_grid_pur, p_grid_exp, u_grid_pur, u_grid_exp = self.grid.add_variables(model)
         self.grid.add_constraints(model, p_grid_pur, p_grid_exp, u_grid_pur, u_grid_exp)
 
+        ## Renewable Energy Sources (RES) modeling
+        p_pv = self.pv.get_pv_output(self.ghi, self.theta_air_out)
+
+        ## Non-controllable appliances (NCAs) modeling
+        p_nc = self.ncload.get_power_consumption()
+
         ## Controllable appliances (CAs) modeling
         # Variables for Solution
-        u_ca = model.addMVar((self.T_num,self.num_ca), vtype=GRB.BINARY, name="u_ca")
-        on_ca = model.addMVar((self.T_num,self.num_ca), vtype=GRB.BINARY, name="on_ca")
-        off_ca = model.addMVar((self.T_num,self.num_ca), vtype=GRB.BINARY, name="off_ca")
-        t_ca_start = model.addMVar(self.num_ca, lb=0, vtype=GRB.INTEGER, name="t_ca_start")
-        p_ca = model.addMVar(self.T_num, lb=0, vtype=GRB.CONTINUOUS, name="p_ca")
-
-        # CAs Constraint
-        for i in range(self.num_ca):
-            # Summation of time operation
-            model.addConstr(u_ca[:,i].sum() == self.num_ca_operation[i])
-
-            # Summation of on mode and off mode
-            model.addConstr(on_ca[:,i].sum() == 1)
-            model.addConstr(off_ca[:, i].sum() == 1)
-
-            # Constraint for range of shiftable devices
-            model.addConstr(self.t_ca_range[:,i] - u_ca[:,i] >= 0)
-
-            # Define time start
-            model.addConstr(t_ca_start[i] == (on_ca[:,i] * self.T_set_24).sum())
-
-        # Constraints for on and off mode with u mode
-        for i in range(self.T_num):
-            model.addConstr(p_ca[i] == (self.p_ca_rate * u_ca[i,:]).sum())
-
-            for j in range(self.num_ca):
-                if i == 0:
-                    model.addConstr(u_ca[0,j] - 0 == on_ca[i,i] - off_ca[i,i])
-                else:
-                    model.addConstr(u_ca[i,j] - u_ca[i-1,j] == on_ca[i,j] - off_ca[i,j])
-
+        u_ca, on_ca, off_ca, t_ca_start, p_ca = self.caload.add_variables(model)
+        self.caload.add_constraints(model, u_ca, on_ca, off_ca, t_ca_start, p_ca)
+        
         ## Battery Energy Storage System (ESS) modeling
         p_ess_ch, p_ess_dch, u_ess_ch, u_ess_dch, soc_ess, _, _ = self.ess.add_variables(model)
         self.ess.add_constraints(model, p_ess_ch, p_ess_dch, u_ess_ch, u_ess_dch, soc_ess)
@@ -158,7 +125,7 @@ class HomeEnergyManagementSystem:
 
         ## Energy balance
         for i in range(self.T_num):
-            model.addConstr((p_grid_pur[i] + self.p_pv[i] + p_ess_dch[i] + p_ev_dch[i]) == (p_grid_exp[i] + self.p_nc[i] + p_ca[i] + p_ess_ch[i] + p_ev_ch[i] + p_hvac_h[i] + p_hvac_c[i] + p_ewh[i]))
+            model.addConstr((p_grid_pur[i] + p_pv[i] + p_ess_dch[i] + p_ev_dch[i]) == (p_grid_exp[i] + p_nc[i] + p_ca[i] + p_ess_ch[i] + p_ev_ch[i] + p_hvac_h[i] + p_hvac_c[i] + p_ewh[i]))
 
         # Cost exchange with utility grid
         energy_cost = self.grid.get_cost(self.rtp, p_grid_pur, p_grid_exp)
@@ -179,20 +146,8 @@ class HomeEnergyManagementSystem:
             model.addConstr(p_grid_max >= p_grid_pur[i] - p_grid_exp[i])
             model.addConstr(p_grid_max <= p_grid_pur[i] - p_grid_exp[i] + (1 - u_grid_max[i]) * 1000)
 
-        ## Discomfort Index (DI)
-        # Variables for Solution
-        discomfort_index = model.addMVar(self.num_ca, lb=0, vtype=GRB.INTEGER, name = "discomfort_index")
-        u_discomfort = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_discomfort")
-
-        # DI Constraint
-        for i in range(self.num_ca):
-            model.addConstr(discomfort_index[i] >= self.t_ca_start_prefer[i] - t_ca_start[i])
-            model.addConstr(discomfort_index[i] >= t_ca_start[i] - self.t_ca_start_prefer[i])
-            model.addConstr(discomfort_index[i] <= self.t_ca_start_prefer[i] - t_ca_start[i] + u_discomfort[i] * 1000)
-            model.addConstr(discomfort_index[i] <= t_ca_start[i] - self.t_ca_start_prefer[i] + (1 - u_discomfort[i]) * 1000)
-
-        # Overall Discomfort Index
-        overall_discomfort_index = discomfort_index.sum()
+        # Discomfort Index
+        overall_discomfort_index = self.caload.get_discomfort_index(model, t_ca_start)
 
         ## Define Objective
         # Sub-problem 1
@@ -284,8 +239,6 @@ class HomeEnergyManagementSystem:
                 'p_grid_exp': p_grid_exp.X,
                 'p_grid_max': p_grid_max.X,
                 'u_grid_max': u_grid_max.X,
-                'discomfort_index': discomfort_index.X,
-                'u_discomfort': u_discomfort.X
             }
             return results
         else:

@@ -25,12 +25,12 @@ class Grid:
 
     def add_constraints(self, model, p_grid_pur, p_grid_exp, u_grid_pur, u_grid_exp):
         """Add constraints to the model."""
-        for i in self.T_set:
-            model.addConstr(p_grid_pur[i] <= self.p_grid_pur_max * u_grid_pur[i])
-            model.addConstr(p_grid_exp[i] <= self.p_grid_exp_max * u_grid_exp[i])
+        for t in self.T_set:
+            model.addConstr(p_grid_pur[t] <= self.p_grid_pur_max * u_grid_pur[t])
+            model.addConstr(p_grid_exp[t] <= self.p_grid_exp_max * u_grid_exp[t])
 
-            model.addConstr(u_grid_pur[i] + u_grid_exp[i] >= 0)
-            model.addConstr(u_grid_pur[i] + u_grid_exp[i] <= 1)
+            model.addConstr(u_grid_pur[t] + u_grid_exp[t] >= 0)
+            model.addConstr(u_grid_pur[t] + u_grid_exp[t] <= 1)
 
     def get_cost(self, rtp, p_grid_pur, p_grid_exp):
         """Add constraints to the model."""
