@@ -101,7 +101,6 @@ class HomeEnergyManagementSystem:
         p_nc = self.ncload.get_power_consumption()
 
         ## Controllable appliances (CAs) modeling
-        # Variables for Solution
         u_ca, on_ca, off_ca, t_ca_start, p_ca = self.caload.add_variables(model)
         self.caload.add_constraints(model, u_ca, on_ca, off_ca, t_ca_start, p_ca)
         

@@ -12,14 +12,13 @@ class CALoad:
         self.num_ca = num_ca
         self.p_ca_rate = np.array(p_ca_rate)
         self.num_ca_operation = np.array(num_ca_operation)
+
         self.t_ca_start_max = np.array(t_ca_start_max)
         self.t_ca_end_max = np.array(t_ca_end_max)
         self.t_ca_start_prefer = np.array(t_ca_start_prefer)
         self.t_ca_end_prefer = np.array(t_ca_end_prefer)
 
         self.t_ca_range = self.get_ca_availability()
-
-        self.T_set_24 = np.arange(1, T_num+1)
 
     def add_variables(self, model):
         """Add variables to the model."""
@@ -46,7 +45,7 @@ class CALoad:
             model.addConstr(self.t_ca_range[:,i] - u_ca[:,i] >= 0)
 
             # Define time start
-            model.addConstr(t_ca_start[i] == (on_ca[:,i] * self.T_set_24).sum())
+            model.addConstr(t_ca_start[i] == (on_ca[:,i] * self.T_set).sum())
 
         # Constraints for on and off mode with u mode
         for i in range(self.T_num):
@@ -68,7 +67,7 @@ class CALoad:
 
         # Use vectorized operations to fill in the availability matrix
         for i in range(self.num_ca):
-            t_ca_range[self.t_ca_start_max[i]-1 : self.t_ca_end_max[i], i] = 1
+            t_ca_range[self.t_ca_start_max[i]:self.t_ca_end_max[i]+1, i] = 1
 
         return t_ca_range
     
