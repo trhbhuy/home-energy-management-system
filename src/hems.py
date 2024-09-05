@@ -8,6 +8,8 @@ from components.utility_grid import Grid
 from components.renewables import PV
 from components.energy_storage import ESS
 from components.electric_vehicle import EV
+from components.hvac_system import HVAC
+from components.electric_water_heating import EWH
 
 class HomeEnergyManagementSystem:
     def __init__(self):
@@ -69,30 +71,11 @@ class HomeEnergyManagementSystem:
         self.ev = EV(cfg.T_NUM, cfg.T_SET, cfg.DELTA_T, cfg.P_EV_CH_MAX, cfg.P_EV_DCH_MAX, cfg.N_EV_CH, cfg.N_EV_DCH, cfg.SOC_EV_MAX, cfg.SOC_EV_MIN, cfg.SOC_EV_SETPOINT)
 
         # Heating, Ventilation, and Air Conditioning (HVAC)
-        self.p_hvac_max = cfg.P_HVAC_MAX
-        self.cop_hvac = cfg.COP_HVAC
-        self.R_build = cfg.R_BUILD
-        self.C_air_in = cfg.C_AIR_IN
-        self.m_air_in = cfg.M_AIR_IN
-        self.coe1_hvac = cfg.COE1_HVAC
-        self.coe2_hvac = cfg.COE2_HVAC
-        self.theta_air_in_setpoint = cfg.THETA_AIR_IN_SETPOINT
-        self.theta_air_in_max = cfg.THETA_AIR_IN_SETPOINT + cfg.THETA_AIR_IN_MAX_OFFSET
-        self.theta_air_in_min = cfg.THETA_AIR_IN_SETPOINT - cfg.THETA_AIR_IN_MIN_OFFSET
+        self.hvac = HVAC(cfg.T_NUM, cfg.T_SET, cfg.DELTA_T, cfg.P_HVAC_MAX, cfg.COP_HVAC, cfg.R_BUILD, cfg.C_AIR_IN, cfg.M_AIR_IN, cfg.COE1_HVAC, cfg.COE2_HVAC, cfg.THETA_AIR_OUT, cfg.THETA_AIR_IN_SETPOINT, cfg.THETA_AIR_IN_MAX_OFFSET, cfg.THETA_AIR_IN_MIN_OFFSET)
 
         # Electric Water Heater (EWH)
-        self.p_ewh_max = cfg.P_EWH_MAX
-        self.C_w = cfg.C_W
-        self.R_w = cfg.R_W
-        self.v_ewh_max = cfg.V_EWH_MAX
-        self.n_ewh = cfg.N_EWH
-        self.coe_ewh = np.exp(-self.delta_t / (self.R_w * self.C_w))
-        self.theta_ewh_setpoint = cfg.THETA_EWH_SETPOINT
-        self.theta_ewh_max = cfg.THETA_EWH_MAX
-        self.theta_ewh_min = cfg.THETA_EWH_MIN
-        self.theta_cold_water = cfg.THETA_COLD_WATER
-        self.v_ewh_demand = cfg.V_EWH_DEMAND
-    
+        self.ewh = EWH(cfg.T_NUM, cfg.T_SET, cfg.DELTA_T, cfg.P_EWH_MAX, cfg.C_W, cfg.R_W, cfg.V_EWH_MAX, cfg.N_EWH, cfg.COE_EWH, cfg.THETA_EWH_SETPOINT, cfg.THETA_EWH_MAX, cfg.THETA_EWH_MIN, cfg.THETA_COLD_WATER, cfg.V_EWH_DEMAND)
+            
     def optim(self, ObjFunc, eps1=0, eps2=0, eps3=0, r2=0, r3=0):
         """
         Optimizes the Home Energy Management System based on the specified objective function.
@@ -166,45 +149,13 @@ class HomeEnergyManagementSystem:
         self.ev.add_constraints(model, p_ev_ch, p_ev_dch, u_ev_ch, u_ev_dch, soc_ev, t_ev_arrive, t_ev_depart, ev_time_range, soc_ev_initial)
 
         ## Heating-Ventilation-Air Conditioner (HVAC) modeling
-        # Variables for Solution
-        p_hvac_h = model.addMVar(self.T_num, lb=0, ub=self.p_hvac_max, vtype=GRB.CONTINUOUS, name="p_hvac_h")
-        p_hvac_c = model.addMVar(self.T_num, lb=0, ub=self.p_hvac_max, vtype=GRB.CONTINUOUS, name="p_hvac_c")
-        u_hvac = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_hvac")
-        theta_air_in = model.addMVar(self.T_num, lb=self.theta_air_in_min, ub=self.theta_air_in_max, vtype=GRB.CONTINUOUS, name="theta_air_in")
+        p_hvac_h, p_hvac_c, u_hvac_h, u_hvac_c, theta_air_in = self.hvac.add_variables(model)
 
-        # HVAC Constraints
-        for i in range(self.T_num):
-            # HVAC heating/cooling power
-            model.addConstr(p_hvac_h[i] <= self.p_hvac_max * u_hvac[i])
-            model.addConstr(p_hvac_c[i] <= self.p_hvac_max * (1 - u_hvac[i]))
-
-            # Indoor air temperature
-            if i <= (self.T_num - 2):
-                model.addConstr(theta_air_in[i+1] == ((1 - self.delta_t/self.coe1_hvac) * theta_air_in[i] + (self.delta_t/self.coe1_hvac) * self.theta_air_out[i] + self.cop_hvac*(p_hvac_h[i] - p_hvac_c[i])*self.delta_t/self.coe2_hvac))
-            elif i == (self.T_num - 1):
-                model.addConstr(self.theta_air_in_setpoint == ((1 - self.delta_t/self.coe1_hvac) * theta_air_in[i] + (self.delta_t/self.coe1_hvac) * self.theta_air_out[i] + self.cop_hvac*(p_hvac_h[i] - p_hvac_c[i])*self.delta_t/self.coe2_hvac))
-
-        model.addConstr(theta_air_in[0] == self.theta_air_in_setpoint)
-        model.addConstr(theta_air_in[-1] == self.theta_air_in_setpoint)
+        self.hvac.add_constraints(model, p_hvac_h, p_hvac_c, u_hvac_h, u_hvac_c, theta_air_in)
 
         ## Electric Water Heater (EWH) modeling
-        # Variables for Solution
-        p_ewh = model.addMVar(self.T_num, lb=0, ub=self.p_ewh_max, vtype=GRB.CONTINUOUS, name="p_ewh")
-        theta_ewh = model.addMVar(self.T_num, lb=self.theta_ewh_min, ub=self.theta_ewh_max, vtype=GRB.CONTINUOUS, name="theta_ewh")
-
-        # EWH Constraints
-        for i in range(self.T_num):
-            # Hot water temperature
-            if i <= (self.T_num - 2):
-                if self.v_ewh_demand[i] == 0:
-                    model.addConstr(theta_ewh[i+1] == (theta_air_in[i] + p_ewh[i] * self.n_ewh * self.C_w * self.delta_t - (theta_air_in[i] - theta_ewh[i]) * self.coe_ewh))
-                elif self.v_ewh_demand[i] > 0:
-                    model.addConstr(theta_ewh[i+1] == ((theta_ewh[i] * (self.v_ewh_max - self.v_ewh_demand[i]) + self.theta_cold_water * self.v_ewh_demand[i])/self.v_ewh_max))
-            elif i == (self.T_num - 1):
-                model.addConstr(self.theta_ewh_setpoint == (theta_air_in[i] + p_ewh[i] * self.n_ewh * self.C_w * self.delta_t - (theta_air_in[i] - theta_ewh[i]) * self.coe_ewh))
-
-        model.addConstr(theta_ewh[0] == self.theta_ewh_setpoint)
-        model.addConstr(theta_ewh[-1] == self.theta_ewh_setpoint)
+        p_ewh, theta_ewh = self.ewh.add_variables(model)
+        self.ewh.add_constraints(model, p_ewh, theta_ewh, theta_air_in)
 
         ## Energy balance
         for i in range(self.T_num):
@@ -212,7 +163,6 @@ class HomeEnergyManagementSystem:
 
         # Cost exchange with utility grid
         energy_cost = self.grid.get_cost(self.rtp, p_grid_pur, p_grid_exp)
-        # energy_cost = gp.quicksum(self.delta_t * (p_grid_pur[i]*self.rtp[i] - p_grid_exp[i]*self.rtp[i]) for i in range(self.T_num))
 
         ## Peak-to-Average (PAR)
         # Variables for Solution
@@ -328,7 +278,6 @@ class HomeEnergyManagementSystem:
                 'soc_ev': soc_ev.X,
                 'p_hvac_h': p_hvac_h.X,
                 'p_hvac_c': p_hvac_c.X,
-                'u_hvac': u_hvac.X,
                 'theta_air_in': theta_air_in.X,
                 'p_ewh': p_ewh.X,
                 'theta_ewh': theta_ewh.X,
