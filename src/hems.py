@@ -11,6 +11,8 @@ from components.electric_vehicle import EV
 from components.hvac_system import HVAC
 from components.electric_water_heating import EWH
 
+from components.non_controllable_load import NCLoad
+
 class HomeEnergyManagementSystem:
     def __init__(self):
         """
@@ -48,11 +50,8 @@ class HomeEnergyManagementSystem:
         self.p_pv = get_pv_output(self.ghi, self.p_pv_rate, self.n_pv, self.theta_air_out)
 
         # Non-controllable appliances
-        self.num_nc = cfg.NUM_NC
-        self.p_nc_rate = cfg.P_NC_RATE
-        self.num_nc_operation = cfg.NUM_NC_OPERATION
-        self.t_nc_start = cfg.T_NC_START
-        self.p_nc = get_nc_consumption(self.T_num, self.num_nc, self.p_nc_rate, self.num_nc_operation, self.t_nc_start)
+        self.ncload = NCLoad(cfg.T_NUM, cfg.T_SET, cfg.DELTA_T, cfg.NUM_NC, cfg.P_NC_RATE, cfg.NUM_NC_OPERATION, cfg.T_NC_START)
+        self.p_nc = self.ncload.get_power_consumption()
 
         # Controllable appliances
         self.num_ca = cfg.NUM_CA

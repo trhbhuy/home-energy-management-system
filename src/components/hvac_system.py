@@ -33,19 +33,18 @@ class HVAC:
 
     def add_constraints(self, model, p_hvac_h, p_hvac_c, u_hvac_h, u_hvac_c, theta_air_in):
         """Add constraints to the model."""
-        for i in self.T_set:
+        for t in self.T_set:
             # HVAC heating/cooling power
-            model.addConstr(p_hvac_h[i] <= self.p_hvac_max * u_hvac_h[i])
-            model.addConstr(p_hvac_c[i] <= self.p_hvac_max * u_hvac_c[i])
-
-            model.addConstr(u_hvac_h[i] + u_hvac_c[i] >= 0)
-            model.addConstr(u_hvac_h[i] + u_hvac_c[i] <= 1)
+            model.addConstr(p_hvac_h[t] <= self.p_hvac_max * u_hvac_h[t])
+            model.addConstr(p_hvac_c[t] <= self.p_hvac_max * u_hvac_c[t])
+            model.addConstr(u_hvac_h[t] + u_hvac_c[t] >= 0)
+            model.addConstr(u_hvac_h[t] + u_hvac_c[t] <= 1)
 
             # Indoor air temperature
-            if i <= self.T_set[-2]:
-                model.addConstr(theta_air_in[i+1] == (1 - self.delta_t/self.coe1_hvac) * theta_air_in[i] + (self.delta_t/self.coe1_hvac) * self.theta_air_out[i] + self.cop_hvac*(p_hvac_h[i] - p_hvac_c[i])*self.delta_t/self.coe2_hvac)
-            elif i == self.T_set[-1]:
-                model.addConstr(self.theta_air_in_setpoint == (1 - self.delta_t/self.coe1_hvac) * theta_air_in[i] + (self.delta_t/self.coe1_hvac) * self.theta_air_out[i] + self.cop_hvac*(p_hvac_h[i] - p_hvac_c[i])*self.delta_t/self.coe2_hvac)
+            if t <= self.T_set[-2]:
+                model.addConstr(theta_air_in[t+1] == (1 - self.delta_t/self.coe1_hvac) * theta_air_in[t] + (self.delta_t/self.coe1_hvac) * self.theta_air_out[t] + self.cop_hvac*(p_hvac_h[t] - p_hvac_c[t])*self.delta_t/self.coe2_hvac)
+            elif t == self.T_set[-1]:
+                model.addConstr(self.theta_air_in_setpoint == (1 - self.delta_t/self.coe1_hvac) * theta_air_in[t] + (self.delta_t/self.coe1_hvac) * self.theta_air_out[t] + self.cop_hvac*(p_hvac_h[t] - p_hvac_c[t])*self.delta_t/self.coe2_hvac)
 
         model.addConstr(theta_air_in[0] == self.theta_air_in_setpoint)
         model.addConstr(theta_air_in[-1] == self.theta_air_in_setpoint)

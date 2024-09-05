@@ -23,14 +23,14 @@ class EWH:
 
     def add_variables(self, model):
         """Add variables to the model."""
-        p_ewh = model.addMVar(self.T_num, vtype=GRB.CONTINUOUS, name="p_ewh")
+        p_ewh = model.addMVar(self.T_num, lb=0, ub=self.p_ewh_max, vtype=GRB.CONTINUOUS, name="p_ewh")
         theta_ewh = model.addMVar(self.T_num, lb=self.theta_ewh_min, ub=self.theta_ewh_max, vtype=GRB.CONTINUOUS, name="theta_ewh")
 
         return p_ewh, theta_ewh
 
     def add_constraints(self, model, p_ewh, theta_ewh, theta_air_in):
         """Add constraints to the model."""
-        for t in self.T_set:
+        for t in self.T_set:            
             # Hot water temperature
             if t <= self.T_set[-2]:
                 if self.v_ewh_demand[t] == 0:
