@@ -38,3 +38,23 @@ class Grid:
         F_grid = gp.quicksum(self.delta_t * (p_grid_pur[i] * rtp[i] - p_grid_exp[i] * rtp[i] * self.phi_rtp) for i in self.T_set)
 
         return F_grid
+
+    def get_max_power(self, model, p_grid_pur, p_grid_exp):
+        """Define max power exchange with utility grid."""
+        p_grid_max = model.addVar(vtype=GRB.CONTINUOUS, name="p_grid_max")
+        u_grid_max = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_grid_max")
+
+        # PAR Constraints
+        model.addConstr(u_grid_max.sum() == 1)
+        for i in range(self.T_num):
+            model.addConstr(p_grid_max >= p_grid_pur[i] - p_grid_exp[i])
+            model.addConstr(p_grid_max <= p_grid_pur[i] - p_grid_exp[i] + (1 - u_grid_max[i]) * 1000)
+        
+        return p_grid_max, u_grid_max
+
+    # def get_average_power(self, p_grid_pur, p_grid_exp):
+    #     """Define average power exchange with utility grid."""        
+    #     return (p_grid_pur - p_grid_exp).sum() / self.T_num
+
+
+

@@ -40,6 +40,9 @@ class HomeEnergyManagementSystem:
 
         self.T_set_24 = cfg.T_SET_24
 
+        self.initialize_components()
+
+    def initialize_components(self):
         # Power exchange limits
         self.grid = Grid(cfg.T_NUM, cfg.T_SET, cfg.DELTA_T, cfg.P_GRID_PUR_MAX, cfg.P_GRID_EXP_MAX, cfg.PHI_RTP)
 
@@ -132,19 +135,12 @@ class HomeEnergyManagementSystem:
 
         ## Peak-to-Average (PAR)
         # Variables for Solution
-        p_grid_max = model.addVar(vtype=GRB.CONTINUOUS, name="p_grid_max")
-        u_grid_max = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_grid_max")
+        p_grid_max, u_grid_max = self.grid.get_max_power(model, p_grid_pur, p_grid_exp)
 
-        p_grid_average = gp.quicksum(((p_grid_pur[i] - p_grid_exp[i]) / self.T_num) for i in range(self.T_num))
+        p_grid_avg = (p_grid_pur - p_grid_exp).sum() / self.T_num
 
-        # PAR
-        PAR = self.delta_t * (p_grid_max - p_grid_average)
-
-        # PAR Constraints
-        model.addConstr(u_grid_max.sum() == 1)
-        for i in range(self.T_num):
-            model.addConstr(p_grid_max >= p_grid_pur[i] - p_grid_exp[i])
-            model.addConstr(p_grid_max <= p_grid_pur[i] - p_grid_exp[i] + (1 - u_grid_max[i]) * 1000)
+        # Peak-to-Average Ratio (PAR)
+        PAR = self.delta_t * (p_grid_max - p_grid_avg)
 
         # Discomfort Index
         overall_discomfort_index = self.caload.get_discomfort_index(model, t_ca_start)
@@ -324,3 +320,19 @@ class HomeEnergyManagementSystem:
         pareto_front = np.array(pareto_solutions)
 
         return pareto_front
+    
+
+
+
+            # def overall_discomfort_index_with_PAR_and_DI():
+            #     # Add constraint for PAR and DI:
+            #     model.addConstr(energy_cost == eps1)
+            #     model.addConstr(PAR == eps2)
+
+            #     model.setObjective(overall_discomfort_index)
+
+            # ObjectiveHandler = {
+            #     6: overall_discomfort_index_with_PAR_and_DI
+            # }
+
+            # ObjectiveHandler[ObjFunc]()

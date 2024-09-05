@@ -29,9 +29,6 @@ class CALoad:
         t_ca_start = model.addMVar(self.num_ca, lb=0, vtype=GRB.INTEGER, name="t_ca_start")
         p_ca = model.addMVar(self.T_num, lb=0, vtype=GRB.CONTINUOUS, name="p_ca")
 
-        # discomfort_index = model.addMVar(self.num_ca, lb=0, vtype=GRB.INTEGER, name = "discomfort_index")
-        # u_discomfort = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_discomfort")
-
         return u_ca, on_ca, off_ca, t_ca_start, p_ca
 
     def add_constraints(self, model, u_ca, on_ca, off_ca, t_ca_start, p_ca):
@@ -57,7 +54,7 @@ class CALoad:
 
             for j in range(self.num_ca):
                 if i == 0:
-                    model.addConstr(u_ca[0,j] - 0 == on_ca[i,i] - off_ca[i,i])
+                    model.addConstr(u_ca[0,j] - 0 == on_ca[i,j] - off_ca[i,j])
                 else:
                     model.addConstr(u_ca[i,j] - u_ca[i-1,j] == on_ca[i,j] - off_ca[i,j])
 
@@ -81,11 +78,11 @@ class CALoad:
         u_discomfort = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_discomfort")
 
         # DI Constraint
-        for i in range(self.num_ca):
-            model.addConstr(discomfort_index[i] >= self.t_ca_start_prefer[i] - t_ca_start[i])
-            model.addConstr(discomfort_index[i] >= t_ca_start[i] - self.t_ca_start_prefer[i])
-            model.addConstr(discomfort_index[i] <= self.t_ca_start_prefer[i] - t_ca_start[i] + u_discomfort[i] * 1000)
-            model.addConstr(discomfort_index[i] <= t_ca_start[i] - self.t_ca_start_prefer[i] + (1 - u_discomfort[i]) * 1000)
+        for t in range(self.num_ca):
+            model.addConstr(discomfort_index[t] >= self.t_ca_start_prefer[t] - t_ca_start[t])
+            model.addConstr(discomfort_index[t] >= t_ca_start[t] - self.t_ca_start_prefer[t])
+            model.addConstr(discomfort_index[t] <= self.t_ca_start_prefer[t] - t_ca_start[t] + u_discomfort[t] * 1000)
+            model.addConstr(discomfort_index[t] <= t_ca_start[t] - self.t_ca_start_prefer[t] + (1 - u_discomfort[t]) * 1000)
 
         return discomfort_index.sum()
 
