@@ -24,17 +24,20 @@ class HomeEnergyManagementSystem:
         self.theta_air_out = cfg.THETA_AIR_OUT
 
         # Time settings
-        self.num_time_steps = cfg.NUM_TIME_STEPS
-        self.T_set = np.arange(1, self.num_time_steps + 1)
-        self.delta_t = 24 / self.num_time_steps
+        self.T_num = cfg.T_NUM
+        self.T_set = cfg.T_SET
+        self.delta_t = cfg.DELTA_T
 
         # Power exchange limits
-        self.p_g2h_max = cfg.P_G2H_MAX
-        self.p_h2g_max = cfg.P_H2G_MAX
+        self.p_grid_pur_max = cfg.P_GRID_PUR_MAX
+        self.p_grid_exp_max = cfg.P_GRID_EXP_MAX
+        self.phi_rtp = cfg.PHI_RTP
 
         # PV system parameters
         self.p_pv_rate = cfg.P_PV_RATE
         self.n_pv = cfg.N_PV
+        self.phi_pv = cfg.PHI_PV
+
         self.p_pv = get_pv_output(self.ghi, self.p_pv_rate, self.n_pv, self.theta_air_out)
 
         # Non-controllable appliances
@@ -42,7 +45,7 @@ class HomeEnergyManagementSystem:
         self.p_nc_rate = cfg.P_NC_RATE
         self.num_nc_operation = cfg.NUM_NC_OPERATION
         self.t_nc_start = cfg.T_NC_START
-        self.p_nc = get_nc_consumption(self.num_time_steps, self.num_nc, self.p_nc_rate, self.num_nc_operation, self.t_nc_start)
+        self.p_nc = get_nc_consumption(self.T_num, self.num_nc, self.p_nc_rate, self.num_nc_operation, self.t_nc_start)
 
         # Controllable appliances
         self.num_ca = cfg.NUM_CA
@@ -52,26 +55,27 @@ class HomeEnergyManagementSystem:
         self.t_ca_end_max = np.array(cfg.T_CA_END_MAX)
         self.t_ca_start_prefer = np.array(cfg.T_CA_START_PREFER)
         self.t_ca_end_prefer = np.array(cfg.T_CA_END_PREFER)
-        self.t_ca_range = get_ca_availability(self.num_time_steps, self.num_ca, self.t_ca_start_max, self.t_ca_end_max)
+        self.t_ca_range = get_ca_availability(self.T_num, self.num_ca, self.t_ca_start_max, self.t_ca_end_max)
 
-        # Battery Energy Storage System (BESS)
-        self.soc_ess_max = cfg.SOC_ESS_MAX
-        self.bess_dod = cfg.BESS_DOD
-        self.soc_ess_min = (1 - self.bess_dod) * self.soc_ess_max
+        # Battery Energy Storage System (ess)
         self.p_ess_ch_max = cfg.P_ESS_CH_MAX
         self.p_ess_dch_max = cfg.P_ESS_DCH_MAX
-        self.n_bess = cfg.N_BESS
+        self.n_ess_ch = cfg.N_ESS_CH
+        self.n_ess_dch = cfg.N_ESS_DCH
+        self.soc_ess_max = cfg.SOC_ESS_MAX
+        self.soc_ess_min = cfg.SOC_ESS_MIN
 
-        # Plug-in Hybrid Electric Vehicles (PEV)
-        self.soc_pev_max = cfg.SOC_PEV_MAX
-        self.pev_dod = cfg.PEV_DOD
-        self.soc_pev_min = (1 - self.pev_dod) * self.soc_pev_max
-        self.p_pev_max = cfg.P_PEV_MAX
-        self.n_pev = cfg.N_PEV
-        self.t_pev_arrive = cfg.T_PEV_ARRIVE
-        self.t_pev_depart = cfg.T_PEV_DEPART
-        self.soc_pev_initial = cfg.SOC_PEV_INITIAL
-        self.t_pev_range, self.num_pev_operation = get_ev_availability(self.num_time_steps, self.t_pev_arrive, self.t_pev_depart)
+        # Plug-in Hybrid Electric Vehicles (ev)
+        self.p_ev_ch_max = cfg.P_EV_CH_MAX
+        self.p_ev_dch_max = cfg.P_EV_DCH_MAX
+        self.n_ev_ch = cfg.N_EV_CH
+        self.n_ev_dch = cfg.N_EV_DCH
+        self.soc_ev_max = cfg.SOC_EV_MAX
+        self.soc_ev_min = cfg.SOC_EV_MIN
+        self.t_ev_arrive = cfg.T_EV_ARRIVE
+        self.t_ev_depart = cfg.T_EV_DEPART
+        self.soc_ev_initial = cfg.SOC_EV_INITIAL
+        self.t_ev_range, self.num_ev_operation = get_ev_availability(self.T_num, self.t_ev_arrive, self.t_ev_depart)
 
         # Heating, Ventilation, and Air Conditioning (HVAC)
         self.p_hvac_max = cfg.P_HVAC_MAX
@@ -82,8 +86,8 @@ class HomeEnergyManagementSystem:
         self.coe1_hvac = cfg.COE1_HVAC
         self.coe2_hvac = cfg.COE2_HVAC
         self.theta_air_in_setpoint = cfg.THETA_AIR_IN_SETPOINT
-        self.theta_air_in_max = self.theta_air_in_setpoint + cfg.THETA_AIR_IN_MAX_OFFSET
-        self.theta_air_in_min = self.theta_air_in_setpoint - cfg.THETA_AIR_IN_MIN_OFFSET
+        self.theta_air_in_max = cfg.THETA_AIR_IN_SETPOINT + cfg.THETA_AIR_IN_MAX_OFFSET
+        self.theta_air_in_min = cfg.THETA_AIR_IN_SETPOINT - cfg.THETA_AIR_IN_MIN_OFFSET
 
         # Electric Water Heater (EWH)
         self.p_ewh_max = cfg.P_EWH_MAX
@@ -123,11 +127,11 @@ class HomeEnergyManagementSystem:
 
         ## Controllable appliances (CAs) modeling
         # Variables for Solution
-        u_ca = model.addMVar((self.num_time_steps,self.num_ca), vtype=GRB.BINARY, name="u_ca")
-        on_ca = model.addMVar((self.num_time_steps,self.num_ca), vtype=GRB.BINARY, name="on_ca")
-        off_ca = model.addMVar((self.num_time_steps,self.num_ca), vtype=GRB.BINARY, name="off_ca")
+        u_ca = model.addMVar((self.T_num,self.num_ca), vtype=GRB.BINARY, name="u_ca")
+        on_ca = model.addMVar((self.T_num,self.num_ca), vtype=GRB.BINARY, name="on_ca")
+        off_ca = model.addMVar((self.T_num,self.num_ca), vtype=GRB.BINARY, name="off_ca")
         t_ca_start = model.addMVar(self.num_ca, lb=0, vtype=GRB.INTEGER, name="t_ca_start")
-        p_ca = model.addMVar(self.num_time_steps, lb=0, vtype=GRB.CONTINUOUS, name="p_ca")
+        p_ca = model.addMVar(self.T_num, lb=0, vtype=GRB.CONTINUOUS, name="p_ca")
 
         # CAs Constraint
         for i in range(self.num_ca):
@@ -145,7 +149,7 @@ class HomeEnergyManagementSystem:
             model.addConstr(t_ca_start[i] == (on_ca[:,i] * self.T_set).sum())
 
         # Constraints for on and off mode with u mode
-        for i in range(self.num_time_steps):
+        for i in range(self.T_num):
             model.addConstr(p_ca[i] == (self.p_ca_rate * u_ca[i,:]).sum())
 
             for j in range(self.num_ca):
@@ -154,68 +158,68 @@ class HomeEnergyManagementSystem:
                 else:
                     model.addConstr(u_ca[i,j] - u_ca[i-1,j] == on_ca[i,j] - off_ca[i,j])
 
-        ## Battery Energy Storage System (BESS) modeling
+        ## Battery Energy Storage System (ess) modeling
         # Variables for Solution
-        p_bess_ch = model.addMVar(self.num_time_steps, lb=0, ub=self.p_ess_ch_max, vtype=GRB.CONTINUOUS, name="p_bess_ch")
-        p_bess_dch = model.addMVar(self.num_time_steps, lb=0, ub=self.p_ess_dch_max, vtype=GRB.CONTINUOUS, name="p_bess_dch")
-        u_bess = model.addMVar(self.num_time_steps, vtype=GRB.BINARY, name="u_bess")
-        soc_bess = model.addMVar(self.num_time_steps, lb=self.soc_ess_min, ub=self.soc_ess_max, vtype=GRB.CONTINUOUS, name="soc_bess")
+        p_ess_ch = model.addMVar(self.T_num, lb=0, ub=self.p_ess_ch_max, vtype=GRB.CONTINUOUS, name="p_ess_ch")
+        p_ess_dch = model.addMVar(self.T_num, lb=0, ub=self.p_ess_dch_max, vtype=GRB.CONTINUOUS, name="p_ess_dch")
+        u_ess = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_ess")
+        soc_ess = model.addMVar(self.T_num, lb=self.soc_ess_min, ub=self.soc_ess_max, vtype=GRB.CONTINUOUS, name="soc_ess")
 
-        # BESS Constraints
-        for i in range(self.num_time_steps):
-            # BESS charging/discharging power
-            model.addConstr(p_bess_ch[i] <= self.p_ess_ch_max * u_bess[i])
-            model.addConstr(p_bess_dch[i] <= self.p_ess_dch_max * (1 - u_bess[i]))
+        # ess Constraints
+        for i in range(self.T_num):
+            # ess charging/discharging power
+            model.addConstr(p_ess_ch[i] <= self.p_ess_ch_max * u_ess[i])
+            model.addConstr(p_ess_dch[i] <= self.p_ess_dch_max * (1 - u_ess[i]))
 
-            # BESS state of charge
-            model.addConstr(soc_bess[i] == soc_bess[i - 1] + self.delta_t * (p_bess_ch[i] * self.n_bess - p_bess_dch[i]/self.n_bess))
+            # ess state of charge
+            model.addConstr(soc_ess[i] == soc_ess[i - 1] + self.delta_t * (p_ess_ch[i] * self.n_ess_ch - p_ess_dch[i]/self.n_ess_dch))
 
-        model.addConstr(soc_bess[0] == self.soc_ess_max)
-        model.addConstr(soc_bess[-1] == self.soc_ess_max)
+        model.addConstr(soc_ess[0] == self.soc_ess_max)
+        model.addConstr(soc_ess[-1] == self.soc_ess_max)
 
-        ## Plug-in Electric Vehicle (PEV) modeling
+        ## Plug-in Electric Vehicle (ev) modeling
         # Variables for Solution
-        p_pev_ch = model.addMVar(self.num_time_steps, lb=0, ub=self.p_pev_max, vtype=GRB.CONTINUOUS, name="p_pev_ch")
-        p_pev_dch = model.addMVar(self.num_time_steps, lb=0, ub=self.p_pev_max, vtype=GRB.CONTINUOUS, name="p_pev_dch")
-        u_pev = model.addMVar(self.num_time_steps, vtype=GRB.BINARY, name="u_pev")
-        soc_pev = model.addMVar(self.num_pev_operation, lb=self.soc_pev_min, ub=self.soc_pev_max, vtype=GRB.CONTINUOUS, name="soc_pev")
+        p_ev_ch = model.addMVar(self.T_num, lb=0, ub=self.p_ev_ch_max, vtype=GRB.CONTINUOUS, name="p_ev_ch")
+        p_ev_dch = model.addMVar(self.T_num, lb=0, ub=self.p_ev_dch_max, vtype=GRB.CONTINUOUS, name="p_ev_dch")
+        u_ev = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_ev")
+        soc_ev = model.addMVar(self.num_ev_operation, lb=self.soc_ev_min, ub=self.soc_ev_max, vtype=GRB.CONTINUOUS, name="soc_ev")
 
-        # PEV Constraints
-        j = self.t_pev_arrive - 1
-        for i in range(self.num_pev_operation):
+        # ev Constraints
+        j = self.t_ev_arrive - 1
+        for i in range(self.num_ev_operation):
             if i == 0:
-                model.addConstr(soc_pev[i] == self.soc_pev_initial + self.delta_t * (p_pev_ch[j] * self.n_pev - p_pev_dch[j]/self.n_pev))
+                model.addConstr(soc_ev[i] == self.soc_ev_initial + self.delta_t * (p_ev_ch[j] * self.n_ev_ch - p_ev_dch[j]/self.n_ev_dch))
             else:
-                model.addConstr(soc_pev[i] == soc_pev[i - 1] + self.delta_t * (p_pev_ch[j] * self.n_pev - p_pev_dch[j]/self.n_pev))
+                model.addConstr(soc_ev[i] == soc_ev[i - 1] + self.delta_t * (p_ev_ch[j] * self.n_ev_ch - p_ev_dch[j]/self.n_ev_dch))
             j = j + 1
 
-        model.addConstr(soc_pev[0] == self.soc_pev_initial)
-        model.addConstr(soc_pev[-1] == self.soc_pev_max)
+        model.addConstr(soc_ev[0] == self.soc_ev_initial)
+        model.addConstr(soc_ev[-1] == self.soc_ev_max)
 
-        for i in range(self.num_time_steps):
-            model.addConstr(p_pev_ch[i] <= self.p_pev_max * u_pev[i])
-            model.addConstr(p_pev_dch[i] <= self.p_pev_max * (1 - u_pev[i]))
+        for i in range(self.T_num):
+            model.addConstr(p_ev_ch[i] <= self.p_ev_ch_max * u_ev[i])
+            model.addConstr(p_ev_dch[i] <= self.p_ev_dch_max * (1 - u_ev[i]))
 
-            model.addConstr(p_pev_ch[i] <= self.p_pev_max * self.t_pev_range[i])
-            model.addConstr(p_pev_dch[i] <= self.p_pev_max * self.t_pev_range[i])
+            model.addConstr(p_ev_ch[i] <= self.p_ev_ch_max * self.t_ev_range[i])
+            model.addConstr(p_ev_dch[i] <= self.p_ev_dch_max * self.t_ev_range[i])
 
         ## Heating-Ventilation-Air Conditioner (HVAC) modeling
         # Variables for Solution
-        p_hvac_h = model.addMVar(self.num_time_steps, lb=0, ub=self.p_hvac_max, vtype=GRB.CONTINUOUS, name="p_hvac_h")
-        p_hvac_c = model.addMVar(self.num_time_steps, lb=0, ub=self.p_hvac_max, vtype=GRB.CONTINUOUS, name="p_hvac_c")
-        u_hvac = model.addMVar(self.num_time_steps, vtype=GRB.BINARY, name="u_hvac")
-        theta_air_in = model.addMVar(self.num_time_steps, lb=self.theta_air_in_min, ub=self.theta_air_in_max, vtype=GRB.CONTINUOUS, name="theta_air_in")
+        p_hvac_h = model.addMVar(self.T_num, lb=0, ub=self.p_hvac_max, vtype=GRB.CONTINUOUS, name="p_hvac_h")
+        p_hvac_c = model.addMVar(self.T_num, lb=0, ub=self.p_hvac_max, vtype=GRB.CONTINUOUS, name="p_hvac_c")
+        u_hvac = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_hvac")
+        theta_air_in = model.addMVar(self.T_num, lb=self.theta_air_in_min, ub=self.theta_air_in_max, vtype=GRB.CONTINUOUS, name="theta_air_in")
 
         # HVAC Constraints
-        for i in range(self.num_time_steps):
+        for i in range(self.T_num):
             # HVAC heating/cooling power
             model.addConstr(p_hvac_h[i] <= self.p_hvac_max * u_hvac[i])
             model.addConstr(p_hvac_c[i] <= self.p_hvac_max * (1 - u_hvac[i]))
 
             # Indoor air temperature
-            if i <= (self.num_time_steps - 2):
+            if i <= (self.T_num - 2):
                 model.addConstr(theta_air_in[i+1] == ((1 - self.delta_t/self.coe1_hvac) * theta_air_in[i] + (self.delta_t/self.coe1_hvac) * self.theta_air_out[i] + self.cop_hvac*(p_hvac_h[i] - p_hvac_c[i])*self.delta_t/self.coe2_hvac))
-            elif i == (self.num_time_steps - 1):
+            elif i == (self.T_num - 1):
                 model.addConstr(self.theta_air_in_setpoint == ((1 - self.delta_t/self.coe1_hvac) * theta_air_in[i] + (self.delta_t/self.coe1_hvac) * self.theta_air_out[i] + self.cop_hvac*(p_hvac_h[i] - p_hvac_c[i])*self.delta_t/self.coe2_hvac))
 
         model.addConstr(theta_air_in[0] == self.theta_air_in_setpoint)
@@ -223,18 +227,18 @@ class HomeEnergyManagementSystem:
 
         ## Electric Water Heater (EWH) modeling
         # Variables for Solution
-        p_ewh = model.addMVar(self.num_time_steps, lb=0, ub=self.p_ewh_max, vtype=GRB.CONTINUOUS, name="p_ewh")
-        theta_ewh = model.addMVar(self.num_time_steps, lb=self.theta_ewh_min, ub=self.theta_ewh_max, vtype=GRB.CONTINUOUS, name="theta_ewh")
+        p_ewh = model.addMVar(self.T_num, lb=0, ub=self.p_ewh_max, vtype=GRB.CONTINUOUS, name="p_ewh")
+        theta_ewh = model.addMVar(self.T_num, lb=self.theta_ewh_min, ub=self.theta_ewh_max, vtype=GRB.CONTINUOUS, name="theta_ewh")
 
         # EWH Constraints
-        for i in range(self.num_time_steps):
+        for i in range(self.T_num):
             # Hot water temperature
-            if i <= (self.num_time_steps - 2):
+            if i <= (self.T_num - 2):
                 if self.v_ewh_demand[i] == 0:
                     model.addConstr(theta_ewh[i+1] == (theta_air_in[i] + p_ewh[i] * self.n_ewh * self.C_w * self.delta_t - (theta_air_in[i] - theta_ewh[i]) * self.coe_ewh))
                 elif self.v_ewh_demand[i] > 0:
                     model.addConstr(theta_ewh[i+1] == ((theta_ewh[i] * (self.v_ewh_max - self.v_ewh_demand[i]) + self.theta_cold_water * self.v_ewh_demand[i])/self.v_ewh_max))
-            elif i == (self.num_time_steps - 1):
+            elif i == (self.T_num - 1):
                 model.addConstr(self.theta_ewh_setpoint == (theta_air_in[i] + p_ewh[i] * self.n_ewh * self.C_w * self.delta_t - (theta_air_in[i] - theta_ewh[i]) * self.coe_ewh))
 
         model.addConstr(theta_ewh[0] == self.theta_ewh_setpoint)
@@ -242,40 +246,40 @@ class HomeEnergyManagementSystem:
 
         ## Energy balance
         # Variables for Solution
-        p_g2h = model.addMVar(self.num_time_steps, lb = 0, ub = self.p_g2h_max, vtype=GRB.CONTINUOUS, name="p_g2h")
-        p_h2g = model.addMVar(self.num_time_steps, lb = 0, ub = self.p_h2g_max, vtype=GRB.CONTINUOUS, name="p_h2g")
-        u_grid = model.addMVar(self.num_time_steps, vtype=GRB.BINARY, name="u_grid")
+        p_grid_pur = model.addMVar(self.T_num, lb = 0, ub = self.p_grid_pur_max, vtype=GRB.CONTINUOUS, name="p_grid_pur")
+        p_grid_exp = model.addMVar(self.T_num, lb = 0, ub = self.p_grid_exp_max, vtype=GRB.CONTINUOUS, name="p_grid_exp")
+        u_grid = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_grid")
 
         # Energy balance Constraints
-        for i in range(self.num_time_steps):
-            model.addConstr(p_g2h[i] <= self.p_g2h_max * u_grid[i])
-            model.addConstr(p_h2g[i] <= self.p_h2g_max * (1 - u_grid[i]))
+        for i in range(self.T_num):
+            model.addConstr(p_grid_pur[i] <= self.p_grid_pur_max * u_grid[i])
+            model.addConstr(p_grid_exp[i] <= self.p_grid_exp_max * (1 - u_grid[i]))
 
-            model.addConstr((p_g2h[i] + self.p_pv[i] + p_bess_dch[i] + p_pev_dch[i]) == (p_h2g[i] + self.p_nc[i] + p_ca[i] + p_bess_ch[i] + p_pev_ch[i] + p_hvac_h[i] + p_hvac_c[i] + p_ewh[i]))
+            model.addConstr((p_grid_pur[i] + self.p_pv[i] + p_ess_dch[i] + p_ev_dch[i]) == (p_grid_exp[i] + self.p_nc[i] + p_ca[i] + p_ess_ch[i] + p_ev_ch[i] + p_hvac_h[i] + p_hvac_c[i] + p_ewh[i]))
 
         # Minimum Energy Cost
-        energy_cost = gp.quicksum(self.delta_t * (p_g2h[i]*self.rtp[i] - p_h2g[i]*self.rtp[i]) for i in range(self.num_time_steps))
+        energy_cost = gp.quicksum(self.delta_t * (p_grid_pur[i]*self.rtp[i] - p_grid_exp[i]*self.rtp[i]) for i in range(self.T_num))
 
         ## Peak-to-Average (PAR)
         # Variables for Solution
-        p_grid_max = model.addVar(lb=0, ub=self.p_g2h_max, vtype=GRB.CONTINUOUS, name="p_grid_max")
-        u_grid_max = model.addMVar(self.num_time_steps, vtype=GRB.BINARY, name="u_grid_max")
+        p_grid_max = model.addVar(lb=0, ub=self.p_grid_pur_max, vtype=GRB.CONTINUOUS, name="p_grid_max")
+        u_grid_max = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_grid_max")
 
-        p_grid_average = gp.quicksum(((p_g2h[i] - p_h2g[i]) / self.num_time_steps) for i in range(self.num_time_steps))
+        p_grid_average = gp.quicksum(((p_grid_pur[i] - p_grid_exp[i]) / self.T_num) for i in range(self.T_num))
 
         # PAR
         PAR = self.delta_t * (p_grid_max - p_grid_average)
 
         # PAR Constraints
         model.addConstr(u_grid_max.sum() == 1)
-        for i in range(self.num_time_steps):
-            model.addConstr(p_grid_max >= p_g2h[i] - p_h2g[i])
-            model.addConstr(p_grid_max <= p_g2h[i] - p_h2g[i] + (1 - u_grid_max[i]) * 1000)
+        for i in range(self.T_num):
+            model.addConstr(p_grid_max >= p_grid_pur[i] - p_grid_exp[i])
+            model.addConstr(p_grid_max <= p_grid_pur[i] - p_grid_exp[i] + (1 - u_grid_max[i]) * 1000)
 
         ## Discomfort Index (DI)
         # Variables for Solution
         discomfort_index = model.addMVar(self.num_ca, lb=0, vtype=GRB.INTEGER, name = "discomfort_index")
-        u_discomfort = model.addMVar(self.num_time_steps, vtype=GRB.BINARY, name="u_discomfort")
+        u_discomfort = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_discomfort")
 
         # DI Constraint
         for i in range(self.num_ca):
@@ -362,22 +366,22 @@ class HomeEnergyManagementSystem:
                 'on_ca': on_ca.X,
                 'off_ca': off_ca.X,
                 't_ca_start': t_ca_start.X,
-                'p_bess_ch': p_bess_ch.X,
-                'p_bess_dch': p_bess_dch.X,
-                'u_bess': u_bess.X,
-                'soc_bess': soc_bess.X,
-                'p_pev_ch': p_pev_ch.X,
-                'p_pev_dch': p_pev_dch.X,
-                'u_pev': u_pev.X,
-                'soc_pev': soc_pev.X,
+                'p_ess_ch': p_ess_ch.X,
+                'p_ess_dch': p_ess_dch.X,
+                'u_ess': u_ess.X,
+                'soc_ess': soc_ess.X,
+                'p_ev_ch': p_ev_ch.X,
+                'p_ev_dch': p_ev_dch.X,
+                'u_ev': u_ev.X,
+                'soc_ev': soc_ev.X,
                 'p_hvac_h': p_hvac_h.X,
                 'p_hvac_c': p_hvac_c.X,
                 'u_hvac': u_hvac.X,
                 'theta_air_in': theta_air_in.X,
                 'p_ewh': p_ewh.X,
                 'theta_ewh': theta_ewh.X,
-                'p_g2h': p_g2h.X,
-                'p_h2g': p_h2g.X,
+                'p_grid_pur': p_grid_pur.X,
+                'p_grid_exp': p_grid_exp.X,
                 'u_grid': u_grid.X,
                 'p_grid_max': p_grid_max.X,
                 'u_grid_max': u_grid_max.X,
