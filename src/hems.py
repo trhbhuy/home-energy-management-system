@@ -4,6 +4,11 @@ from gurobipy import GRB
 import config as cfg
 from util import get_pv_output, get_nc_consumption, get_ca_availability, get_ev_availability
 
+from components.utility_grid import Grid
+from components.renewables import PV
+from components.energy_storage import ESS
+from components.electric_vehicle import EV
+
 class HomeEnergyManagementSystem:
     def __init__(self):
         """
@@ -28,10 +33,10 @@ class HomeEnergyManagementSystem:
         self.T_set = cfg.T_SET
         self.delta_t = cfg.DELTA_T
 
+        self.T_set_24 = cfg.T_SET_24
+
         # Power exchange limits
-        self.p_grid_pur_max = cfg.P_GRID_PUR_MAX
-        self.p_grid_exp_max = cfg.P_GRID_EXP_MAX
-        self.phi_rtp = cfg.PHI_RTP
+        self.grid = Grid(cfg.T_NUM, cfg.T_SET, cfg.DELTA_T, cfg.P_GRID_PUR_MAX, cfg.P_GRID_EXP_MAX, cfg.PHI_RTP)
 
         # PV system parameters
         self.p_pv_rate = cfg.P_PV_RATE
@@ -58,24 +63,10 @@ class HomeEnergyManagementSystem:
         self.t_ca_range = get_ca_availability(self.T_num, self.num_ca, self.t_ca_start_max, self.t_ca_end_max)
 
         # Battery Energy Storage System (ess)
-        self.p_ess_ch_max = cfg.P_ESS_CH_MAX
-        self.p_ess_dch_max = cfg.P_ESS_DCH_MAX
-        self.n_ess_ch = cfg.N_ESS_CH
-        self.n_ess_dch = cfg.N_ESS_DCH
-        self.soc_ess_max = cfg.SOC_ESS_MAX
-        self.soc_ess_min = cfg.SOC_ESS_MIN
+        self.ess = ESS(cfg.T_NUM, cfg.T_SET, cfg.DELTA_T, cfg.P_ESS_CH_MAX, cfg.P_ESS_DCH_MAX, cfg.N_ESS_CH, cfg.N_ESS_DCH, cfg.SOC_ESS_MAX, cfg.SOC_ESS_MIN, cfg.SOC_ESS_SETPOINT)
 
         # Plug-in Hybrid Electric Vehicles (ev)
-        self.p_ev_ch_max = cfg.P_EV_CH_MAX
-        self.p_ev_dch_max = cfg.P_EV_DCH_MAX
-        self.n_ev_ch = cfg.N_EV_CH
-        self.n_ev_dch = cfg.N_EV_DCH
-        self.soc_ev_max = cfg.SOC_EV_MAX
-        self.soc_ev_min = cfg.SOC_EV_MIN
-        self.t_ev_arrive = cfg.T_EV_ARRIVE
-        self.t_ev_depart = cfg.T_EV_DEPART
-        self.soc_ev_initial = cfg.SOC_EV_INITIAL
-        self.t_ev_range, self.num_ev_operation = get_ev_availability(self.T_num, self.t_ev_arrive, self.t_ev_depart)
+        self.ev = EV(cfg.T_NUM, cfg.T_SET, cfg.DELTA_T, cfg.P_EV_CH_MAX, cfg.P_EV_DCH_MAX, cfg.N_EV_CH, cfg.N_EV_DCH, cfg.SOC_EV_MAX, cfg.SOC_EV_MIN, cfg.SOC_EV_SETPOINT)
 
         # Heating, Ventilation, and Air Conditioning (HVAC)
         self.p_hvac_max = cfg.P_HVAC_MAX
@@ -125,6 +116,10 @@ class HomeEnergyManagementSystem:
         model.ModelSense = GRB.MINIMIZE
         model.Params.LogToConsole = 0
 
+        ## Grid modeling
+        p_grid_pur, p_grid_exp, u_grid_pur, u_grid_exp = self.grid.add_variables(model)
+        self.grid.add_constraints(model, p_grid_pur, p_grid_exp, u_grid_pur, u_grid_exp)
+
         ## Controllable appliances (CAs) modeling
         # Variables for Solution
         u_ca = model.addMVar((self.T_num,self.num_ca), vtype=GRB.BINARY, name="u_ca")
@@ -146,7 +141,7 @@ class HomeEnergyManagementSystem:
             model.addConstr(self.t_ca_range[:,i] - u_ca[:,i] >= 0)
 
             # Define time start
-            model.addConstr(t_ca_start[i] == (on_ca[:,i] * self.T_set).sum())
+            model.addConstr(t_ca_start[i] == (on_ca[:,i] * self.T_set_24).sum())
 
         # Constraints for on and off mode with u mode
         for i in range(self.T_num):
@@ -158,50 +153,17 @@ class HomeEnergyManagementSystem:
                 else:
                     model.addConstr(u_ca[i,j] - u_ca[i-1,j] == on_ca[i,j] - off_ca[i,j])
 
-        ## Battery Energy Storage System (ess) modeling
-        # Variables for Solution
-        p_ess_ch = model.addMVar(self.T_num, lb=0, ub=self.p_ess_ch_max, vtype=GRB.CONTINUOUS, name="p_ess_ch")
-        p_ess_dch = model.addMVar(self.T_num, lb=0, ub=self.p_ess_dch_max, vtype=GRB.CONTINUOUS, name="p_ess_dch")
-        u_ess = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_ess")
-        soc_ess = model.addMVar(self.T_num, lb=self.soc_ess_min, ub=self.soc_ess_max, vtype=GRB.CONTINUOUS, name="soc_ess")
+        ## Battery Energy Storage System (ESS) modeling
+        p_ess_ch, p_ess_dch, u_ess_ch, u_ess_dch, soc_ess, _, _ = self.ess.add_variables(model)
+        self.ess.add_constraints(model, p_ess_ch, p_ess_dch, u_ess_ch, u_ess_dch, soc_ess)
 
-        # ess Constraints
-        for i in range(self.T_num):
-            # ess charging/discharging power
-            model.addConstr(p_ess_ch[i] <= self.p_ess_ch_max * u_ess[i])
-            model.addConstr(p_ess_dch[i] <= self.p_ess_dch_max * (1 - u_ess[i]))
+        ## Plug-in Electric Vehicle (EV) modeling
+        p_ev_ch, p_ev_dch, u_ev_ch, u_ev_dch, soc_ev = self.ev.add_variables(model)
+    
+        # Define PEV range operation
+        t_ev_arrive, t_ev_depart, ev_time_range, soc_ev_initial = self.ev.get_ev_availablity(cfg.T_EV_ARRIVE, cfg.T_EV_DEPART, cfg.SOC_EV_INITIAL)
 
-            # ess state of charge
-            model.addConstr(soc_ess[i] == soc_ess[i - 1] + self.delta_t * (p_ess_ch[i] * self.n_ess_ch - p_ess_dch[i]/self.n_ess_dch))
-
-        model.addConstr(soc_ess[0] == self.soc_ess_max)
-        model.addConstr(soc_ess[-1] == self.soc_ess_max)
-
-        ## Plug-in Electric Vehicle (ev) modeling
-        # Variables for Solution
-        p_ev_ch = model.addMVar(self.T_num, lb=0, ub=self.p_ev_ch_max, vtype=GRB.CONTINUOUS, name="p_ev_ch")
-        p_ev_dch = model.addMVar(self.T_num, lb=0, ub=self.p_ev_dch_max, vtype=GRB.CONTINUOUS, name="p_ev_dch")
-        u_ev = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_ev")
-        soc_ev = model.addMVar(self.num_ev_operation, lb=self.soc_ev_min, ub=self.soc_ev_max, vtype=GRB.CONTINUOUS, name="soc_ev")
-
-        # ev Constraints
-        j = self.t_ev_arrive - 1
-        for i in range(self.num_ev_operation):
-            if i == 0:
-                model.addConstr(soc_ev[i] == self.soc_ev_initial + self.delta_t * (p_ev_ch[j] * self.n_ev_ch - p_ev_dch[j]/self.n_ev_dch))
-            else:
-                model.addConstr(soc_ev[i] == soc_ev[i - 1] + self.delta_t * (p_ev_ch[j] * self.n_ev_ch - p_ev_dch[j]/self.n_ev_dch))
-            j = j + 1
-
-        model.addConstr(soc_ev[0] == self.soc_ev_initial)
-        model.addConstr(soc_ev[-1] == self.soc_ev_max)
-
-        for i in range(self.T_num):
-            model.addConstr(p_ev_ch[i] <= self.p_ev_ch_max * u_ev[i])
-            model.addConstr(p_ev_dch[i] <= self.p_ev_dch_max * (1 - u_ev[i]))
-
-            model.addConstr(p_ev_ch[i] <= self.p_ev_ch_max * self.t_ev_range[i])
-            model.addConstr(p_ev_dch[i] <= self.p_ev_dch_max * self.t_ev_range[i])
+        self.ev.add_constraints(model, p_ev_ch, p_ev_dch, u_ev_ch, u_ev_dch, soc_ev, t_ev_arrive, t_ev_depart, ev_time_range, soc_ev_initial)
 
         ## Heating-Ventilation-Air Conditioner (HVAC) modeling
         # Variables for Solution
@@ -245,24 +207,16 @@ class HomeEnergyManagementSystem:
         model.addConstr(theta_ewh[-1] == self.theta_ewh_setpoint)
 
         ## Energy balance
-        # Variables for Solution
-        p_grid_pur = model.addMVar(self.T_num, lb = 0, ub = self.p_grid_pur_max, vtype=GRB.CONTINUOUS, name="p_grid_pur")
-        p_grid_exp = model.addMVar(self.T_num, lb = 0, ub = self.p_grid_exp_max, vtype=GRB.CONTINUOUS, name="p_grid_exp")
-        u_grid = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_grid")
-
-        # Energy balance Constraints
         for i in range(self.T_num):
-            model.addConstr(p_grid_pur[i] <= self.p_grid_pur_max * u_grid[i])
-            model.addConstr(p_grid_exp[i] <= self.p_grid_exp_max * (1 - u_grid[i]))
-
             model.addConstr((p_grid_pur[i] + self.p_pv[i] + p_ess_dch[i] + p_ev_dch[i]) == (p_grid_exp[i] + self.p_nc[i] + p_ca[i] + p_ess_ch[i] + p_ev_ch[i] + p_hvac_h[i] + p_hvac_c[i] + p_ewh[i]))
 
-        # Minimum Energy Cost
-        energy_cost = gp.quicksum(self.delta_t * (p_grid_pur[i]*self.rtp[i] - p_grid_exp[i]*self.rtp[i]) for i in range(self.T_num))
+        # Cost exchange with utility grid
+        energy_cost = self.grid.get_cost(self.rtp, p_grid_pur, p_grid_exp)
+        # energy_cost = gp.quicksum(self.delta_t * (p_grid_pur[i]*self.rtp[i] - p_grid_exp[i]*self.rtp[i]) for i in range(self.T_num))
 
         ## Peak-to-Average (PAR)
         # Variables for Solution
-        p_grid_max = model.addVar(lb=0, ub=self.p_grid_pur_max, vtype=GRB.CONTINUOUS, name="p_grid_max")
+        p_grid_max = model.addVar(vtype=GRB.CONTINUOUS, name="p_grid_max")
         u_grid_max = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_grid_max")
 
         p_grid_average = gp.quicksum(((p_grid_pur[i] - p_grid_exp[i]) / self.T_num) for i in range(self.T_num))
@@ -368,11 +322,9 @@ class HomeEnergyManagementSystem:
                 't_ca_start': t_ca_start.X,
                 'p_ess_ch': p_ess_ch.X,
                 'p_ess_dch': p_ess_dch.X,
-                'u_ess': u_ess.X,
                 'soc_ess': soc_ess.X,
                 'p_ev_ch': p_ev_ch.X,
                 'p_ev_dch': p_ev_dch.X,
-                'u_ev': u_ev.X,
                 'soc_ev': soc_ev.X,
                 'p_hvac_h': p_hvac_h.X,
                 'p_hvac_c': p_hvac_c.X,
@@ -382,7 +334,6 @@ class HomeEnergyManagementSystem:
                 'theta_ewh': theta_ewh.X,
                 'p_grid_pur': p_grid_pur.X,
                 'p_grid_exp': p_grid_exp.X,
-                'u_grid': u_grid.X,
                 'p_grid_max': p_grid_max.X,
                 'u_grid_max': u_grid_max.X,
                 'discomfort_index': discomfort_index.X,

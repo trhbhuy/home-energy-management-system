@@ -78,8 +78,9 @@ def get_ev_availability(num_time_steps, arrival_time, departure_time):
     """
     # Create a binary array indicating PEV availability using slicing
     ev_time_range = np.zeros(num_time_steps)
-    ev_time_range[arrival_time - 1:departure_time] = 1
-
+    ev_time_range[arrival_time:departure_time+1] = 1
+    # ev_time_range[arrival_time - 1:departure_time] = 1
+    
     # Calculate the number of available time steps using np.sum on the binary array
     num_pev_operation = int(np.sum(ev_time_range))
     
