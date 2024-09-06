@@ -16,7 +16,7 @@ def get_best_compromise_solution(pareto_solutions):
 
     Returns:
         numpy.ndarray: The best compromise solution from the Pareto set.
-    """
+    """   
     # Number of solutions and objectives
     num_solutions, num_objectives = pareto_solutions.shape
 

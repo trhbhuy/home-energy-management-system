@@ -1,5 +1,8 @@
 import argparse
 import logging
+import gurobipy as gp
+from gurobipy import GRB
+
 from hems import HomeEnergyManagementSystem
 from decision_making import get_best_compromise_solution
 
@@ -8,99 +11,78 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 def parse_option():
     """
-    Parse command-line arguments for the training script.
+    Parse command-line arguments for the optimization script.
     """
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description='Home Energy Management System Optimization')
     parser.add_argument('--mode', choices=['single', 'multi'], default='multi', help="Choose between 'single' and 'multi' objective optimization")
-    parser.add_argument('--objective', choices=['energy_cost', 'PAR', 'DI'], default='energy_cost', help="Specify the single objective to optimize")
-    parser.add_argument('--num_grid_points', type=int, default=7, help='Number of grid points for epsilon-constraint method')
+    parser.add_argument('--obj', choices=['energy_cost', 'PAR', 'discomfort_index'], default='energy_cost', help="Specify the single objective to optimize")
+    parser.add_argument('--num_grid_points', type=int, default=6, help='Number of grid points for epsilon-constraint method')
+
     args = parser.parse_args()
 
     return args
 
-def single_objective_optimization(hems, objective):
+def single_objective_optimization(hems, obj):
     """
     Perform single-objective optimization.
-
-    Args:
-        objective (str): The objective to optimize ('energy_cost', 'PAR', or 'DI').
-        hems (HomeEnergyManagementSystem): The HEMS instance.
-
-    Returns:
-        dict: The results of the optimization.
     """
-    objective_mapping = {
-        'energy_cost': 1,
-        'PAR': 4,
-        'DI': 7
-    }
+    logging.info(f"Starting single-objective optimization for {obj}")
+    model, z = hems.init_optim_model()
 
-    ObjFunc = objective_mapping.get(objective)
-    if ObjFunc is None:
-        raise ValueError(f"Invalid objective function: {objective}")
+    # Set objective and optimize
+    model.setObjective(z[obj])
+    model.optimize()
 
-    # Solve the single-objective optimization problem
-    results = hems.optim(ObjFunc)
-    
     # Log the optimal solution
-    logging.info(f"Optimal solution: {results['ObjVal']}")
-    
-    if results:
-        logging.info(f"Optimal solution found with objective value: {results['ObjVal']}")
+    if model.status == GRB.OPTIMAL:
+        logging.info(f"Optimal {obj} value: {model.ObjVal}")
+        results = hems.get_results_by_name(model)
     else:
-        logging.warning("No optimal solution was found.")
-
-    return results
+        logging.error(f"Optimization failed for objective {obj}")
 
 def multi_objective_optimization(hems, num_grid_points):
     """
     Perform multi-objective optimization using the epsilon-constraint method.
-
-    Args:
-        num_grid_points (int): Number of grid points for epsilon-constraint method.
-        hems (HomeEnergyManagementSystem): The HEMS instance.
-
-    Returns:
-        np.ndarray: The best compromise solution from the Pareto Front.
     """
-    logging.info("Multi-objective optimization using the epsilon-constraint method")
+    logging.info("Starting multi-objective optimization using epsilon-constraint method")
 
-    # Generate payoff tables
-    original_payoff_table, lexicographic_payoff_table = hems.generate_payoff_tables()
+    # Generate payoff table
+    payoff_table = hems.generate_payoff_table()
+    logging.info("Payoff table generated successfully")
 
-    # Compute the Pareto Front using the epsilon-constraint method
-    pareto_front = hems.pareto_optimization(lexicographic_payoff_table, num_grid_points)
+    # Compute the Pareto front using the epsilon-constraint method
+    solutions = hems.epsilon_constraint_method(payoff_table, num_grid_points)
+    logging.info(f"Pareto front calculated with {len(solutions)} solutions")
 
-    # Apply fuzzy decision-making to find the best compromise solution on the Pareto Front
-    best_compromise_solution = get_best_compromise_solution(pareto_front)
+    # Apply decision-making logic to get the best compromise solution
+    best_solution = get_best_compromise_solution(solutions)
+    logging.info(f"Best compromise solution found: {best_solution}")
 
-    logging.info("Optimization process completed. Best Compromise Solution:")
-    logging.info(best_compromise_solution)
-
-    return best_compromise_solution
+    return best_solution
 
 def main():
     """
     Main function for running the Home Energy Management System (HEMS) optimization.
     """
-    logging.info("Starting HEMS optimization process")
+    logging.info("Initializing the HEMS optimization process")
 
+    # Parse command-line arguments
     args = parse_option()
 
     # Initialize the Home Energy Management System (HEMS)
-    hems = HomeEnergyManagementSystem()
+    objectives = ['energy_cost', 'PAR', 'discomfort_index']
+    hems = HomeEnergyManagementSystem(objectives)
 
+    # Check the mode and perform the appropriate optimization
     if args.mode == 'single':
-        # Perform single-objective optimization
-        single_objective_optimization(hems, args.objective)
+        single_objective_optimization(hems, args.obj)
     elif args.mode == 'multi':
-        # Perform multi-objective optimization
         multi_objective_optimization(hems, args.num_grid_points)
     else:
         logging.error("Invalid mode selected. Please choose 'single' or 'multi'.")
 
-# python3 src/main.py --mode single --objective energy_cost
-# python3 src/main.py --mode multi --num_grid_points 7
+# python3 src/main.py --mode single --obj energy_cost
+# python3 src/main.py --mode multi --num_grid_points 6
 if __name__ == "__main__":
     main()

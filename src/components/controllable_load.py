@@ -39,7 +39,7 @@ class CALoad:
 
             # Summation of on mode and off mode
             model.addConstr(on_ca[:,i].sum() == 1)
-            model.addConstr(off_ca[:, i].sum() == 1)
+            model.addConstr(off_ca[:,i].sum() == 1)
 
             # Constraint for range of shiftable devices
             model.addConstr(self.t_ca_range[:,i] - u_ca[:,i] >= 0)
@@ -48,14 +48,14 @@ class CALoad:
             model.addConstr(t_ca_start[i] == (on_ca[:,i] * self.T_set).sum())
 
         # Constraints for on and off mode with u mode
-        for i in range(self.T_num):
-            model.addConstr(p_ca[i] == (self.p_ca_rate * u_ca[i,:]).sum())
+        for t in self.T_set:
+            model.addConstr(p_ca[t] == (self.p_ca_rate * u_ca[t,:]).sum())
 
             for j in range(self.num_ca):
-                if i == 0:
-                    model.addConstr(u_ca[0,j] - 0 == on_ca[i,j] - off_ca[i,j])
+                if t == 0:
+                    model.addConstr(u_ca[0,j] - 0 == on_ca[t,j] - off_ca[t,j])
                 else:
-                    model.addConstr(u_ca[i,j] - u_ca[i-1,j] == on_ca[i,j] - off_ca[i,j])
+                    model.addConstr(u_ca[t,j] - u_ca[t-1,j] == on_ca[t,j] - off_ca[t,j])
 
     def get_ca_availability(self):
         """
@@ -75,7 +75,7 @@ class CALoad:
         """Calculate the discomfort index for the controllable appliances."""
         discomfort_index = model.addMVar(self.num_ca, lb=0, vtype=GRB.INTEGER, name = "discomfort_index")
         u_discomfort = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_discomfort")
-
+                                  
         # DI Constraint
         for t in range(self.num_ca):
             model.addConstr(discomfort_index[t] >= self.t_ca_start_prefer[t] - t_ca_start[t])

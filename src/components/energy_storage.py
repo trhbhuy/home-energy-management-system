@@ -25,17 +25,17 @@ class ESS:
 
     def add_variables(self, model):
         """Add variables to the model."""
-        p_ess_ch = model.addMVar(self.T_num, vtype=GRB.CONTINUOUS, name="p_ess_ch")
-        p_ess_dch = model.addMVar(self.T_num, vtype=GRB.CONTINUOUS, name="p_ess_dch")
-        u_ess_ch = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_ess_ch")
-        u_ess_dch = model.addMVar(self.T_num, vtype=GRB.BINARY, name="u_ess_dch")
-        soc_ess = model.addMVar(self.T_num, lb=self.soc_ess_min, ub=self.soc_ess_max, vtype=GRB.CONTINUOUS, name="soc_ess")
+        p_ess_ch = model.addVars(self.T_set, vtype=GRB.CONTINUOUS, name="p_ess_ch")
+        p_ess_dch = model.addVars(self.T_set, vtype=GRB.CONTINUOUS, name="p_ess_dch")
+        u_ess_ch = model.addVars(self.T_set, vtype=GRB.BINARY, name="u_ess_ch")
+        u_ess_dch = model.addVars(self.T_set, vtype=GRB.BINARY, name="u_ess_dch")
+        soc_ess = model.addVars(self.T_set, lb=self.soc_ess_min, ub=self.soc_ess_max, vtype=GRB.CONTINUOUS, name="soc_ess")
 
         # Add optional optimization variables if `enable_cost_modeling` is True
         p_ess, F_ess = None, None
         if self.enable_cost_modeling:
-            p_ess = model.addMVar(self.T_num, vtype=GRB.CONTINUOUS, name="p_ess")
-            F_ess = model.addMVar(self.T_num, vtype=GRB.CONTINUOUS, name="F_ess")
+            p_ess = model.addVars(self.T_set, vtype=GRB.CONTINUOUS, name="p_ess")
+            F_ess = model.addVars(self.T_set, vtype=GRB.CONTINUOUS, name="F_ess")
 
         return p_ess_ch, p_ess_dch, u_ess_ch, u_ess_dch, soc_ess, p_ess, F_ess
 
@@ -47,7 +47,10 @@ class ESS:
             model.addConstr(u_ess_ch[t] + u_ess_dch[t] >= 0)
             model.addConstr(u_ess_ch[t] + u_ess_dch[t] <= 1)
             
-            model.addConstr(soc_ess[t] == soc_ess[t-1] + self.delta_t * (p_ess_ch[t] * self.n_ess_ch - p_ess_dch[t]/self.n_ess_dch))
+            if t == 0:
+                model.addConstr(soc_ess[t] == self.soc_ess_setpoint + self.delta_t * (p_ess_ch[t] * self.n_ess_ch - p_ess_dch[t] / self.n_ess_dch))
+            else:
+                model.addConstr(soc_ess[t] == soc_ess[t-1] + self.delta_t * (p_ess_ch[t] * self.n_ess_ch - p_ess_dch[t] / self.n_ess_dch))
 
         model.addConstr(soc_ess[0] == self.soc_ess_setpoint)
         model.addConstr(soc_ess[self.T_set[-1]] == self.soc_ess_setpoint)
