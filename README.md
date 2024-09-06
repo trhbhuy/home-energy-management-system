@@ -1,4 +1,4 @@
-# augmented-epsilon-constraint-home-energy-management-system
+# home-energy-management-system
 
 This is the implementation for our paper: ["Multi-objective framework for a home energy management system with the integration of solar energy and an electric vehicle using an augmented ε-constraint method and lexicographic optimization"](https://doi.org/10.1016/j.scs.2022.104289), published at Sustainable Cities and Society.
 
