@@ -4,7 +4,7 @@ import gurobipy as gp
 from gurobipy import GRB
 
 from hems import HomeEnergyManagementSystem
-from decision_making import get_best_compromise_solution
+from utils.decision_making import get_best_compromise_solution
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

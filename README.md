@@ -17,11 +17,20 @@ The dataset contains load and temperature data from 2003 to 2014. -->
 ```bash
 .
 └── src/
-    └── config.py
-    └── decision_making.py
-    └── hems.py
+    ├── components/
+    │   ├── controllable_load.py
+    │   ├── electric_vehicle.py
+    │   ├── electric_water_heating.py
+    │   ├── energy_storage.py
+    │   ├── hvac_system.py
+    │   ├── non_controllable_load.py
+    │   ├── renewables.py
+    │   └── utility_grid.py
+    ├── utils/
+    │   └── decision_making.py
+    ├── config.py
+    ├── hems.py
     └── main.py
-    └── util.py
 ```
 
 ## How to run
@@ -29,13 +38,13 @@ The dataset contains load and temperature data from 2003 to 2014. -->
 ### Single-objective optimization
 
 ```
-python3 main.py --mode multi --num_grid_points 7
+python3 main.py --mode single --obj energy_cost
 ```
 
 ### Multi-objective optimization
 
 ```
-python3 main.py --mode single --objective energy_cost --num_grid_points 7
+python3 main.py --mode multi --num_grid_points 6
 ```
 
 ## Citation
