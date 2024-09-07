@@ -16,8 +16,8 @@ class Grid:
         
     def add_variables(self, model):
         """Add variables to the model."""
-        p_grid_pur = model.addVars(self.T_set, ub = self.p_grid_pur_max, vtype=GRB.CONTINUOUS, name="p_grid_pur")
-        p_grid_exp = model.addVars(self.T_set, ub = self.p_grid_pur_max, vtype=GRB.CONTINUOUS, name="p_grid_exp")
+        p_grid_pur = model.addVars(self.T_set, vtype=GRB.CONTINUOUS, name="p_grid_pur")
+        p_grid_exp = model.addVars(self.T_set, vtype=GRB.CONTINUOUS, name="p_grid_exp")
         u_grid_pur = model.addVars(self.T_set, vtype=GRB.BINARY, name="u_grid_pur")
         u_grid_exp = model.addVars(self.T_set, vtype=GRB.BINARY, name="u_grid_exp")
 

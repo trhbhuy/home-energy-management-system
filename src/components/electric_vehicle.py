@@ -27,7 +27,7 @@ class EV:
 
         return p_ev_ch, p_ev_dch, u_ev_ch, u_ev_dch, soc_ev
 
-    def add_constraints(self, model, p_ev_ch, p_ev_dch, u_ev_ch, u_ev_dch, soc_ev, t_ev_arrive, t_ev_depart, ev_time_range, soc_ev_initial):
+    def add_constraints(self, model, p_ev_ch, p_ev_dch, u_ev_ch, u_ev_dch, soc_ev, t_ev_arrive, t_ev_depart, ev_time_range, soc_ev_init):
         """Add constraints to the model."""
         for t in self.T_set:
             # Charging and discharging power constraints
@@ -45,18 +45,18 @@ class EV:
         # State of charge (SOC) of EV constraints
         for t in range(t_ev_arrive, t_ev_depart+1):
             if t == t_ev_arrive:
-                model.addConstr(soc_ev[t] == soc_ev_initial + self.delta_t * (p_ev_ch[t] * self.n_ev_ch - p_ev_dch[t] / self.n_ev_dch))
+                model.addConstr(soc_ev[t] == soc_ev_init + self.delta_t * (p_ev_ch[t] * self.n_ev_ch - p_ev_dch[t] / self.n_ev_dch))
             else:
                 model.addConstr(soc_ev[t] == soc_ev[t-1] + self.delta_t * (p_ev_ch[t] * self.n_ev_ch - p_ev_dch[t] / self.n_ev_dch))
 
         # Set the initial and final SOC of EV
-        model.addConstr(soc_ev[t_ev_arrive] == soc_ev_initial)
+        model.addConstr(soc_ev[t_ev_arrive] == soc_ev_init)
         model.addConstr(soc_ev[t_ev_depart] == self.soc_ev_setpoint)
 
-    def get_ev_availablity(self, ArriveTime, DepartureTime, soc_ev_initial, soc_ev_initial_percentage=None):
+    def get_ev_availablity(self, ArriveTime, DepartureTime, soc_ev_init, soc_ev_init_perc=None):
         """Define availablity of EV action."""
-        if soc_ev_initial_percentage is not None:
-            soc_ev_initial = self.soc_ev_max * soc_ev_initial_percentage
+        if soc_ev_init_perc is not None:
+            soc_ev_init = self.soc_ev_max * soc_ev_init_perc
 
         t_ev_arrive = ArriveTime
         t_ev_depart = DepartureTime
@@ -65,4 +65,4 @@ class EV:
         ev_time_range[t_ev_arrive:t_ev_depart+1] = 1
         self.num_pv_operation = int(np.sum(ev_time_range))
 
-        return t_ev_arrive, t_ev_depart, ev_time_range, soc_ev_initial
+        return t_ev_arrive, t_ev_depart, ev_time_range, soc_ev_init

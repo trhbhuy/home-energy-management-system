@@ -74,8 +74,8 @@ class HomeEnergyManagementSystem:
 
         ## EV modeling
         p_ev_ch, p_ev_dch, u_ev_ch, u_ev_dch, soc_ev = self.ev.add_variables(model)    
-        t_ev_arrive, t_ev_depart, ev_time_range, soc_ev_initial = self.ev.get_ev_availablity(cfg.T_EV_ARRIVE, cfg.T_EV_DEPART, cfg.SOC_EV_INITIAL)
-        self.ev.add_constraints(model, p_ev_ch, p_ev_dch, u_ev_ch, u_ev_dch, soc_ev, t_ev_arrive, t_ev_depart, ev_time_range, soc_ev_initial)
+        t_ev_arrive, t_ev_depart, ev_time_range, soc_ev_init = self.ev.get_ev_availablity(cfg.T_EV_ARRIVE, cfg.T_EV_DEPART, cfg.SOC_EV_INIT)
+        self.ev.add_constraints(model, p_ev_ch, p_ev_dch, u_ev_ch, u_ev_dch, soc_ev, t_ev_arrive, t_ev_depart, ev_time_range, soc_ev_init)
 
         ## HVAC modeling
         p_hvac_h, p_hvac_c, u_hvac_h, u_hvac_c, theta_air_in = self.hvac.add_variables(model)
