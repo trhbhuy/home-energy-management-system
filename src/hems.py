@@ -108,7 +108,7 @@ class HomeEnergyManagementSystem:
 
         return model, z
     
-    def solve_subproblem(self, model, z, objectives):
+    def _solve_subproblem(self, model, z, objectives):
         """
         Solve the subproblems for lexicographic optimization.
         """
@@ -146,7 +146,7 @@ class HomeEnergyManagementSystem:
             model, z = self.init_optim_model()
 
             # Solve the subproblem for the current lexicographic order
-            payoff_table = self.solve_subproblem(model, z, objectives)
+            payoff_table = self._solve_subproblem(model, z, objectives)
 
             # Assign the results based on lexicographic order
             if i == 0:

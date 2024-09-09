@@ -1,5 +1,3 @@
-# src/get_best_compromise_solution.py
-
 import numpy as np
 
 def get_best_compromise_solution(pareto_solutions):
