@@ -1,6 +1,5 @@
 import argparse
 import logging
-import gurobipy as gp
 from gurobipy import GRB
 
 from hems import HomeEnergyManagementSystem
@@ -53,7 +52,7 @@ def multi_objective_optimization(hems, num_grid_points):
 
     # Compute the Pareto front using the epsilon-constraint method
     solutions = hems.epsilon_constraint_method(payoff_table, num_grid_points)
-    logging.info(f"Pareto front calculated with {len(solutions)} solutions")
+    logging.info(f"Pareto front obtained with {len(solutions)} solutions")
 
     # Apply decision-making logic to get the best compromise solution
     best_solution = get_best_compromise_solution(solutions)

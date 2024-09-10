@@ -2,15 +2,14 @@
 
 This is the implementation for our paper: ["Multi-objective framework for a home energy management system with the integration of solar energy and an electric vehicle using an augmented ε-constraint method and lexicographic optimization"](https://doi.org/10.1016/j.scs.2022.104289), published at Sustainable Cities and Society.
 
-<!-- ## Environment 
 
-- tensorflow: 2.0
-- torch: 1.9 -->
+## Setup 
 
-<!-- ## Dataset
-We opensource in this repository the model used for the ISO-NE test case. Code for ResNetPlus model can be found in /ISO-NE/ResNetPlus_ISONE.py
+```bash
+conda env create -n hems --file env.yml
+conda activate hems
+```
 
-The dataset contains load and temperature data from 2003 to 2014. -->
 
 ## Structure
 
@@ -33,6 +32,7 @@ The dataset contains load and temperature data from 2003 to 2014. -->
     └── main.py
 ```
 
+
 ## How to run
 
 ### Single-objective optimization
@@ -46,6 +46,7 @@ python3 main.py --mode single --obj energy_cost
 ```
 python3 main.py --mode multi --num_grid_points 6
 ```
+
 
 ## Citation
 If you find the codes useful in your research, please consider citing:
@@ -63,5 +64,5 @@ If you find the codes useful in your research, please consider citing:
 }
 ```
 
-<!-- ## License
-[MIT LICENSE](LICENSE) -->
+## License
+[MIT LICENSE](LICENSE)
