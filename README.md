@@ -64,5 +64,5 @@ If you find the codes useful in your research, please consider citing:
 }
 ```
 
-## License
-[MIT LICENSE](LICENSE)
+<!-- ## License
+[MIT LICENSE](LICENSE) -->
