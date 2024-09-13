@@ -186,7 +186,6 @@ class HomeEnergyManagementSystem:
                 # Apply ε-constraints to remaining objectives
                 for obj in self.objectives[1:]:
                     model.addConstr(z[obj] + slack[obj] == rhs[obj], name=f"eps_{obj}_{ii}_{jj}")
-                    # model.addConstr(z[obj] <= rhs[obj], name=f"eps_{obj}_{ii}_{jj}")
 
                 # Augmented objective to avoid weakly Pareto solutions
                 model.setObjective(z[self.objectives[0]] - 1e-3 * gp.quicksum(slack[obj] / (max_obj[obj] - min_obj[obj]) for obj in self.objectives[1:]), GRB.MINIMIZE)
